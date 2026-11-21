@@ -1,0 +1,6 @@
+# Docker Compose だけがマウントする。Render のイメージには含まれない。
+# /api/ で始まるパスを、同じ Compose ネットワークの api コンテナへ渡す。
+# パスは剥がさない。api 側も /api/hello で受けている。
+handle /api/* {
+	reverse_proxy api:8080
+}

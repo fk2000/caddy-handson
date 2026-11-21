@@ -1,0 +1,45 @@
+# 手元（OrbStack や Docker Desktop）でだけ使う。
+# Render はこのファイルを読まない。公開先は Dockerfile のコンテナ 1 つ。
+# api の image タグは Dockerfile の CADDY_VERSION と揃える。
+
+name: caddy-handson
+
+services:
+  web:
+    build: .
+    image: caddy-handson:local
+    ports:
+      - "8080:8080"
+    environment:
+      PORT: "8080"
+    volumes:
+      # 手元ではファイルをマウントする。HTML は再読み込みで反映される。
+      # Caddyfile を直したあとは `docker compose restart web` が必要。
+      # Render ではビルド時にコピーした中身が使われ、このマウントは無い。
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./site:/srv:ro
+      - ./optional/noop.caddy:/etc/caddy/optional/noop.caddy:ro
+      - ./compose/proxy.caddy:/etc/caddy/optional/proxy.caddy:ro
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+
+  api:
+    # ホストのポートは開けない。web サービスからのみ到達する。
+    image: caddy:2.11.9-alpine
+    expose:
+      - "8080"
+    volumes:
+      - ./api/Caddyfile:/etc/caddy/Caddyfile:ro
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/api/hello"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s

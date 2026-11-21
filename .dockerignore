@@ -1,0 +1,12 @@
+.git
+.github
+.gitignore
+.gitattributes
+README.md
+render.yaml
+docker-compose.yml
+scripts
+api
+compose
+**/*.md
+**/.DS_Store

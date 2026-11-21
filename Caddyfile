@@ -1,0 +1,125 @@
+# Caddyfile — ハンズオン用の見本
+#
+# 手元の Docker Compose でも、Render の無料 Web サービスでも同じファイルを使う。
+# Render では TLS が手前で終わるので、このプロセスは平文の HTTP だけを話す。
+#
+# ディレクティブの多くは、書いた順ではなく Caddy が決めた順で実行される。
+# 下の区切りは、章として読むための並びである。
+# 例外は handle で、パスごとのルートに分かれる。
+{
+	# グローバルオプションは、最初のサイトブロックより前に書く。
+
+	# 証明書の自動取得と、HTTP から HTTPS への転送をしない。
+	# サイトアドレスが :ポート だけなので、待受そのものも HTTP である。
+	# auto_https off は「ドメイン名を書いたときに証明書を取りに行かない」ための保険。
+	auto_https off
+
+	# TLS が無いので HTTP/2 と HTTP/3 は使えず、そのままでは起動のたびに警告が出る。
+	# コンテナは HTTP/1.1 だけを話す。ブラウザとの HTTP/2 は Render の入口が担当する。
+	servers {
+		protocols h1
+	}
+
+	# 設定変更用の管理 API（既定では localhost:2019）は、この見本では使わない。
+	admin off
+
+	# プロセス自身のログ（起動や警告）も JSON で標準出力へ出す。
+	# アクセスログはサイトブロック側の log ディレクティブ。
+	log {
+		output stdout
+		format json
+		level INFO
+	}
+}
+
+# 通常の応答と 404 の両方で使う。エラー処理は別ルートなので、サイト側だけでは届かない。
+(security_headers) {
+	# defer は、応答を返す直前に適用する、という指定。
+	# こうしないと、後段が付けた Server ヘッダを消せない。
+	header {
+		defer
+		# 中身の型をブラウザに勝手に推測させない。
+		X-Content-Type-Options nosniff
+		# 他サイトの iframe に埋め込まれないようにする。
+		X-Frame-Options DENY
+		# 古いブラウザ向け。新しい制御は下の CSP の frame-ancestors。
+		Referrer-Policy strict-origin-when-cross-origin
+		# このサイトは同一オリジンの CSS / JS / 画像だけを読む。
+		Content-Security-Policy "default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; object-src 'none'"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		# サーバ名を隠すのは補助的な対策で、これ自体が防御にはならない。
+		-Server
+	}
+}
+
+# {$PORT:8080} は、環境変数 PORT があればその値、無ければ 8080。
+# 先頭のコロンは全インターフェース（0.0.0.0）で待つ、という意味。
+# 127.0.0.1 だけにすると、Render のプロキシから届かない。
+:{$PORT:8080} {
+	# --- 圧縮 ---
+	# クライアントの Accept-Encoding で選ぶ。q 値が同じなら、先に書いた方式を使う。
+	# ここでは zstd を優先し、非対応のクライアントには gzip を返す。
+	# 既定では本文が 512 バイト未満だと圧縮しない。/healthz の "ok" は対象外になる。
+	encode zstd gzip
+
+	# --- セキュリティヘッダ ---
+	import security_headers
+
+	# HSTS は「次からこのホストは HTTPS で開け」とブラウザに記憶させる。
+	# localhost や 127.0.0.1 に付けると、手元の HTTP が開けなくなる。
+	# Render のホスト名で来たときだけ付ける。サブドメインは無いので includeSubDomains は付けない。
+	@behind_tls {
+		not host localhost 127.0.0.1
+	}
+	header @behind_tls Strict-Transport-Security "max-age=15552000"
+
+	# --- キャッシュ ---
+	# HTML は再検証させる。拡張子のある静的ファイルだけ少し長く持つ。
+	# ファイル名にハッシュを付けていないので、immutable にはしない。
+	@assets path *.css *.js *.svg *.png *.jpg *.webp *.ico *.woff2
+	header @assets Cache-Control "public, max-age=86400"
+	@documents {
+		not path /healthz /api/* *.css *.js *.svg *.png *.jpg *.webp *.ico *.woff2
+	}
+	header @documents Cache-Control "no-cache"
+
+	# --- アクセスログ ---
+	# 1 リクエスト 1 行の JSON。Render のログ画面にも、この標準出力がそのまま出る。
+	log {
+		output stdout
+		format json
+	}
+
+	# --- ヘルスチェック ---
+	# Render の healthCheckPath と、手元の確認スクリプトがここを見る。
+	# 仕事をしない。200 と短い本文だけ返す。キャッシュさせない。
+	handle /healthz {
+		header Content-Type "text/plain; charset=utf-8"
+		header Cache-Control "no-store"
+		respond "ok" 200
+	}
+
+	# --- 手元だけの逆プロキシ ---
+	# optional/*.caddy をこの位置に読み込む。
+	# イメージに入っている noop.caddy はコメントだけなので、何もしない。
+	# Docker Compose はここに compose/proxy.caddy をマウントし、/api/* を 2 台目へ渡す。
+	# 一致するファイルが 1 つも無いとき、Caddy は警告を出して続行する（失敗にはしない）。
+	import /etc/caddy/optional/*.caddy
+
+	# --- 静的ファイル ---
+	# 公式イメージの初期ページは /usr/share/caddy にある。この見本は /srv を使う。
+	# ディレクトリを開いたときは index.html を返す（/features/ など）。
+	handle {
+		root * /srv
+		file_server
+	}
+
+	# 404 だけ、状態コードはそのままに本文を用意したページへ差し替える。
+	# 502 などの別のエラーはここへ入れない（逆プロキシの失敗を 404 と見せない）。
+	handle_errors 404 {
+		import security_headers
+		root * /srv
+		rewrite * /404.html
+		file_server
+	}
+}

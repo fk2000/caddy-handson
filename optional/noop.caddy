@@ -1,0 +1,3 @@
+# このファイルは意図的に何もしない。
+# Render 用イメージに同梱し、Caddyfile の import が空にならないようにする。
+# 逆プロキシの設定は compose/proxy.caddy にあり、Compose が実行時に横へマウントする。

@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Caddy の機能 — ハンズオン</title>
+  <meta name="description" content="自動 HTTPS をオフにする理由、逆プロキシ、圧縮、レスポンスヘッダを、この見本の Caddyfile に沿って説明します。">
+  <link rel="icon" href="/assets/mark.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div class="stripe"></div>
+  <header class="wrap site-header">
+    <a class="brand" href="/">
+      <img src="/assets/mark.svg" alt="" width="48" height="48">
+      <div>
+        <p class="kicker">AI × Docker ハンズオン</p>
+        <h1 class="page-title">Caddy の機能</h1>
+      </div>
+    </a>
+    <nav class="nav" aria-label="ページ">
+      <a href="/">トップ</a>
+      <a href="/features/">Caddy の機能</a>
+      <a href="/healthz">/healthz</a>
+    </nav>
+  </header>
+  <main class="wrap">
+    <p class="lead">ここに書いてあることは、リポジトリ直下の Caddyfile と対応しています。設定の全文と節ごとの解説は README にあります。</p>
+
+    <section class="panel" id="https">
+      <h2>自動 HTTPS は、このデプロイでは使わない</h2>
+      <p>Caddy は、公開できるホスト名でサイトを定義すると、証明書の取得と更新を自分で行います。それが自動 HTTPS です。訪問者のブラウザとサーバの間を、Caddy 自身が TLS で包みます。</p>
+      <p>Render の Web サービスでは、その役割は入口のプロキシが持ちます。ブラウザから Render までは HTTPS で、コンテナに届く時点では平文の HTTP です。コンテナの中で証明書を取りに行くと、待受が衝突したり、名前解決の対象がコンテナ自身になって失敗したりします。</p>
+      <ol class="flow">
+        <li><strong>1. ブラウザ</strong><span>HTTPS</span></li>
+        <li><strong>2. Render の入口</strong><span>TLS はここで終わる</span></li>
+        <li><strong>3. Caddy</strong><span>平文 HTTP。ポートは PORT</span></li>
+      </ol>
+      <p>そのため Caddyfile のグローバルオプションは <code>auto_https off</code> です。サイトアドレスも <code>:{$PORT:8080}</code> と、ホスト名ではなくポートだけにしています。コロンから始まるアドレスは全インターフェースの HTTP です。待ち受けは HTTP/1.1 だけにしています。TLS が無い HTTP/2 は使えず、ブラウザとの HTTP/2 は Render の入口が担当します。</p>
+    </section>
+
+    <section class="panel" id="proxy">
+      <h2>逆プロキシは手元の Compose だけ</h2>
+      <p>逆プロキシは、受け取ったリクエストを別のプロセスへ渡し、その応答をクライアントに返す動きです。アプリをインターネットに直接出さず、入口を 1 つにまとめられます。</p>
+      <p>この見本では <code>/api/*</code> だけを、Compose 内の <code>api</code> コンテナ（ポート 8080）へ渡します。設定は <code>compose/proxy.caddy</code> にあり、実行時にマウントします。Dockerfile はコピーしません。Render の無料枠はインスタンスを 1 つしか持てず、ディスクも付けられないので、公開先は静的サイトのコンテナだけにします。</p>
+      <p>下のボタンは <code>GET /api/hello</code> を呼びます。Compose では 2 台目の JSON が返り、単体コンテナではこのパスを配っていないので 404 になります。</p>
+      <button type="button" id="api-button">/api/hello を呼ぶ</button>
+      <pre id="api-result"><code>まだ呼んでいません。</code></pre>
+    </section>
+
+    <section class="panel" id="encode">
+      <h2>圧縮</h2>
+      <p><code>encode zstd gzip</code> は、応答の本文を圧縮します。クライアントが <code>Accept-Encoding</code> で示す方式から選び、q 値が同じなら先に書いた zstd を使います。gzip は、zstd を話さないクライアント向けのフォールバックです。</p>
+      <p>既定では本文が 512 バイト未満の応答は圧縮しません。<code>/healthz</code> の <code>ok</code> が平文のままなのはそのためです。圧縮した応答には <code>Content-Length</code> が付かず、<code>Vary: Accept-Encoding</code> が付きます。</p>
+      <pre><code>curl -sD - -o /dev/null -H 'Accept-Encoding: gzip' http://127.0.0.1:8080/</code></pre>
+    </section>
+
+    <section class="panel" id="headers">
+      <h2>ヘッダ</h2>
+      <p>全応答に、内容の推測禁止（<code>nosniff</code>）、フレーム埋め込みの拒否、Referrer-Policy、Content-Security-Policy、Permissions-Policy を付けています。CSP の <code>frame-ancestors</code> が現在の埋め込み制御で、<code>X-Frame-Options</code> は古いクライアント向けの重ねがけです。</p>
+      <p>HSTS はブラウザに「このホストは以後 HTTPS で開け」と記憶させます。localhost に付けると手元の HTTP が開けなくなるので、ホストが localhost と 127.0.0.1 のときは付けません。Render のホスト名で届いた応答にだけ付きます。</p>
+      <p>HTML の <code>Cache-Control</code> は <code>no-cache</code>（保存してよいが、使う前に再検証する）です。CSS や JS や SVG は 1 日キャッシュします。ファイル名に内容ハッシュが無いので、<code>immutable</code> にはしていません。<code>/healthz</code> は <code>no-store</code> です。</p>
+      <p>廃止された <code>X-XSS-Protection</code> は付けていません。有効にすると、古いブラウザで別の不具合を招くことがあります。</p>
+    </section>
+
+    <section class="panel" id="logs">
+      <h2>アクセスログ</h2>
+      <p>サイトブロックの <code>log</code> は、1 リクエストにつき 1 行の JSON を標準出力へ書きます。コンテナのログがそのまま記録になる、という形です。プロセスの起動メッセージも、グローバルオプション側で JSON にしています。</p>
+      <p>手前にプロキシがいるとき、ログに出るクライアントアドレスは訪問者ではなく入口のアドレスになることがあります。この見本ではそこは直しません。</p>
+    </section>
+
+    <section class="note" id="healthz">
+      <h2>ヘルスチェック</h2>
+      <p><a href="/healthz"><code>/healthz</code></a> は <code>200</code> と本文 <code>ok</code> だけを返します。依存関係の問い合わせはしません。Render の <code>healthCheckPath</code> も同じパスです。</p>
+    </section>
+  </main>
+  <footer class="wrap site-footer">
+    <p>この見本は Caddy、Docker、Render の各名称を説明のために使っています。各プロジェクトの公式サイトではありません。</p>
+  </footer>
+  <script src="/js/api-demo.js" defer></script>
+</body>
+</html>
