@@ -1,0 +1,23 @@
+# Caddy ハンズオンを、無料の Docker Web サービス 1 台として定義する。
+# ダッシュボードの New > Blueprint からこのファイルを適用する。
+# ここには秘密情報を書かない。2 台目の API コンテナも含めない（無料枠は 1 インスタンス）。
+
+services:
+  - type: web
+    name: caddy-handson
+    runtime: docker
+    # 無料のコンピュートプラン。0.1 CPU / 512 MB。有料プランにはしない。
+    plan: free
+    # 日本からの読者向け。oregon（未指定時の既定）へ変えてもよい。
+    # 作成後にリージョンは変更できない。
+    region: singapore
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /healthz
+    # 接続したブランチへの push で再デプロイする（Web サービスの既定と同じ）。
+    autoDeployTrigger: commit
+    envVars:
+      # Render は PORT を渡す。番号をファイル上でも固定し、Caddyfile の {$PORT} と対応させる。
+      # コンテナはこのポートで平文 HTTP を待つ。TLS は Render の入口で終わる。
+      - key: PORT
+        value: "10000"

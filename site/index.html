@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Caddy ハンズオン</title>
+  <meta name="description" content="手元の Docker と Render の無料 Web サービスで、同じ Caddy 設定を動かすための見本サイトです。">
+  <link rel="icon" href="/assets/mark.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div class="stripe"></div>
+  <header class="wrap site-header">
+    <a class="brand" href="/">
+      <img src="/assets/mark.svg" alt="" width="48" height="48">
+      <div>
+        <p class="kicker">AI × Docker ハンズオン</p>
+        <h1>Caddy で配る、小さな見本</h1>
+      </div>
+    </a>
+    <nav class="nav" aria-label="ページ">
+      <a href="/">トップ</a>
+      <a href="/features/">Caddy の機能</a>
+      <a href="/healthz">/healthz</a>
+    </nav>
+  </header>
+  <main class="wrap">
+    <p class="lead">このサイトは、インフラエンジニア向けのハンズオン見本です。静的なページを Caddy で配り、手元では Docker Compose、公開先では Render の無料 Web サービス（コンテナ 1 つ）として動かします。</p>
+
+    <ul class="cards">
+      <li>
+        <strong>手元</strong>
+        <span>Compose で Web と、逆プロキシ先の小さな API を起動します。ブラウザは <code>http://localhost:8080/</code> です。</span>
+      </li>
+      <li>
+        <strong>公開</strong>
+        <span>Render では TLS が入口で終わります。Caddy は環境変数 <code>PORT</code> の平文 HTTP だけを待ちます。</span>
+      </li>
+      <li>
+        <strong>確認</strong>
+        <span><code>/healthz</code> は常に 200 を返します。デプロイのヘルスチェックと、手元の確認スクリプトがここを見ます。</span>
+      </li>
+    </ul>
+
+    <section class="panel">
+      <h2>この見本で触るもの</h2>
+      <ul class="plain">
+        <li>日本語コメント付きの Caddyfile（圧縮、セキュリティヘッダ、キャッシュ、JSON のアクセスログ）</li>
+        <li>arm64 と amd64 のどちらでも動く、公式イメージをタグ固定した Dockerfile</li>
+        <li>手元だけで有効な <code>/api/*</code> の逆プロキシ</li>
+        <li>無料プランの Web サービスを定義した <code>render.yaml</code></li>
+      </ul>
+    </section>
+
+    <section class="note">
+      <h2>次に読む</h2>
+      <p>機能ごとの説明は <a href="/features/">Caddy の機能</a> にまとめてあります。起動手順と Render への出し方は、リポジトリの README を見てください。</p>
+    </section>
+  </main>
+  <footer class="wrap site-footer">
+    <p>この見本は Caddy、Docker、Render の各名称を説明のために使っています。各プロジェクトの公式サイトではありません。</p>
+  </footer>
+</body>
+</html>

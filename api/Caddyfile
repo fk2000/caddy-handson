@@ -1,0 +1,31 @@
+# 手元の 2 台目。ホストには公開せず、web からの reverse_proxy だけが届く。
+# 待ち受けは 8080 固定。Web 側が api:8080 を向いているので、PORT は見ない。
+{
+	auto_https off
+	admin off
+	servers {
+		protocols h1
+	}
+	log {
+		output stdout
+		format json
+		level INFO
+	}
+}
+
+:8080 {
+	log {
+		output stdout
+		format json
+	}
+
+	handle /api/hello {
+		header Content-Type "application/json; charset=utf-8"
+		header Cache-Control "no-store"
+		respond `{"service":"api","message":"2台目のコンテナから応答しました"}` 200
+	}
+
+	handle {
+		respond "api: not found" 404
+	}
+}
