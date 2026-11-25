@@ -158,3 +158,7 @@ TLS 証明書は Render が入口で付けます。コンテナ内の Caddy は�
 | `scripts/check.sh` | `caddy validate` とスモークテスト |
 
 名称は説明のための記載です。この見本は Caddy、Docker、Render の公式サイトではなく、ロゴ画像も置いていません。
+
+## ライセンス
+
+[MIT License](./LICENSE) です。
